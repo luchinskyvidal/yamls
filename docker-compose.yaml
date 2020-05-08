@@ -1,0 +1,63 @@
+version: "3.3"
+
+services:
+  traefik:
+    image: "traefik:v2.1.3"
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --providers.docker
+      - --api
+      - --certificatesresolvers.leresolver.acme.httpchallenge=true
+      - --certificatesresolvers.leresolver.acme.email=luchinsky.vidal@gmail.cl
+      - --certificatesresolvers.leresolver.acme.storage=/acme.json
+      - --certificatesresolvers.leresolver.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./acme.json:/acme.json"
+    labels:
+      # global redirect to https
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+
+      # middleware redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+  my-app:
+    image: tutum/hello-world
+    labels:
+      - "traefik.http.routers.my-app.rule=Host(`lb.luchinskyvidal.cl`)"
+      - "traefik.http.routers.my-app.entrypoints=websecure"
+      - "traefik.http.routers.my-app.tls=true"
+      - "traefik.http.routers.my-app.tls.certresolver=leresolver"
+
+  nginx:
+    image: nginx:latest
+    labels:
+      - "traefik.http.routers.my-app2.rule=Host(`master.luchinskyvidal.cl`)"
+      - "traefik.http.routers.my-app2.entrypoints=websecure"
+      - "traefik.http.routers.my-app2.tls=true"
+      - "traefik.http.routers.my-app2.tls.certresolver=leresolver"
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    user: arsenical
+    volumes: 
+      - "jenkins_home:/var/jenkins_home"
+    environment:
+      JENKINS_HOST_HOME: "/data/jenkins"
+    ports:
+      - "9090:9090"
+      - "5000:5000"
+      - "50000:50000"
+    labels:
+      - "traefik.http.routers.my-app3.rule=Host(`jenkins.luchinskyvidal.cl`)"
+      - "traefik.http.routers.my-app3.entrypoints=websecure"
+      - "traefik.http.routers.my-app3.tls=true"
+      - "traefik.http.routers.my-app3.tls.certresolver=leresolver"
